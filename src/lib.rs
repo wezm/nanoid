@@ -125,6 +125,7 @@
 )]
 
 pub mod alphabet;
+#[cfg(feature = "rand")]
 pub mod rngs;
 
 pub fn format(random: fn(usize) -> Vec<u8>, alphabet: &[char], size: usize) -> String {
@@ -159,6 +160,7 @@ pub fn format(random: fn(usize) -> Vec<u8>, alphabet: &[char], size: usize) -> S
 }
 
 #[cfg(test)]
+#[cfg(feature = "rand")]
 mod test_format {
     use super::*;
 
@@ -187,6 +189,7 @@ mod test_format {
 }
 
 #[macro_export]
+#[cfg(feature = "rand")]
 macro_rules! nanoid {
     // simple
     () => {
@@ -209,11 +212,21 @@ macro_rules! nanoid {
     };
 }
 
+#[macro_export]
+#[cfg(not(feature = "rand"))]
+macro_rules! nanoid {
+    // complex
+    ($size:tt, $alphabet:expr, $random:expr) => {
+        $crate::format($random, $alphabet, $size)
+    };
+}
+
 #[cfg(test)]
 mod test_macros {
     use super::*;
 
     #[test]
+    #[cfg(feature = "rand")]
     fn simple() {
         let id: String = nanoid!();
 
@@ -221,6 +234,7 @@ mod test_macros {
     }
 
     #[test]
+    #[cfg(feature = "rand")]
     fn generate() {
         let id: String = nanoid!(42);
 
@@ -228,6 +242,7 @@ mod test_macros {
     }
 
     #[test]
+    #[cfg(feature = "rand")]
     fn custom() {
         let id: String = nanoid!(42, &alphabet::SAFE);
 
@@ -236,9 +251,29 @@ mod test_macros {
 
     #[test]
     fn complex() {
-        let id: String = nanoid!(4, &alphabet::SAFE, rngs::default);
+        fn xorshift32(state: &mut u32) -> u32 {
+            // Algorithm "xor" from p. 4 of Marsaglia, "Xorshift RNGs"
+            let mut x = *state;
+            x ^= x << 13;
+            x ^= x >> 17;
+            x ^= x << 5;
+            *state = x;
+            x
+        }
 
-        assert_eq!(id.len(), 4);
+        fn random(size: usize) -> Vec<u8> {
+            let mut state = 42;
+            let mut bytes = Vec::with_capacity(size);
+            while bytes.len() < size {
+                bytes.extend_from_slice(&xorshift32(&mut state).to_be_bytes())
+            }
+            bytes.truncate(size);
+            bytes
+        }
+
+        let id: String = nanoid!(10, &alphabet::SAFE, random);
+
+        assert_eq!(id, "_H3CD8OGqB");
     }
 }
 
